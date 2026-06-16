@@ -1,0 +1,8 @@
+services:
+  prototype-web:
+    build: .
+    image: ghcr.io/echofoxx/prototype-pipeline-template:local
+    container_name: prototype-pipeline-template
+    ports:
+      - "8099:80"
+    restart: unless-stopped
