@@ -14,11 +14,15 @@ permissions:
   contents: read
   packages: write
 
+concurrency:
+  group: prototype-ci-${{ github.ref }}
+  cancel-in-progress: true
+
 env:
   IMAGE_NAME: ghcr.io/echofoxx/${{ github.event.repository.name }}
 
 jobs:
-  build-and-publish:
+  build-validate-publish:
     runs-on: ubuntu-latest
 
     steps:
@@ -28,6 +32,23 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
+      - name: Build image for validation
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: false
+          tags: ${{ env.IMAGE_NAME }}:ci-test
+          load: true
+
+      - name: Smoke test container
+        run: |
+          docker run -d --name prototype-ci-test -p 8088:80 ${{ env.IMAGE_NAME }}:ci-test
+          sleep 5
+          curl -fsS http://localhost:8088/health
+          curl -fsS http://localhost:8088/ >/tmp/index.html
+          docker logs prototype-ci-test
+          docker rm -f prototype-ci-test
+
       - name: Log in to GitHub Container Registry
         if: github.event_name != 'pull_request'
         uses: docker/login-action@v3
@@ -35,14 +56,6 @@ jobs:
           registry: ghcr.io
           username: echofoxx
           password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Build image for validation
-        if: github.event_name == 'pull_request'
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          push: false
-          tags: ${{ env.IMAGE_NAME }}:pr-test
 
       - name: Build and push image
         if: github.event_name != 'pull_request'
@@ -53,3 +66,4 @@ jobs:
           tags: |
             ${{ env.IMAGE_NAME }}:latest
             ${{ env.IMAGE_NAME }}:${{ github.sha }}
+            ${{ env.IMAGE_NAME }}:${{ github.ref_name }}
